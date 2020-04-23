@@ -4,19 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Threading;
 using UnityEngine;
 
 namespace KCMod {
-    public class StateOfEmergencyMod: MonoBehaviour
-    {
+    public class StateOfEmergencyMod: MonoBehaviour {
         public KCModHelper helper;
         
         //After scene loads
-        void SceneLoaded(KCModHelper helper)
-        {
-        
-        }
+        void SceneLoaded(KCModHelper helper) { }
 
         //Before scene loads
         void Preload(KCModHelper helper)
@@ -30,39 +25,68 @@ namespace KCMod {
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
 
-        private void Update()
-        {
-            //Code here if mod needed updated per frame
-        }
+        private void Update() { }
 
         [HarmonyPatch(typeof(ChamberOfWar))]
         [HarmonyPatch("Update")]
-        public static class StateOfEmergencyPatch
-        {
+        public static class StateOfEmergencyPatch {
             private static int state = 0;
 
-            static void Postfix(ChamberOfWar __instance)
-            {
-                switch(state) 
-                {
-                    case 0: // Activate hazard pay when Dragons spawn
-                        if (!Player.inst.hazardPay && DragonSpawn.inst.currentDragons.Count > 0) {
+            static void Postfix(ChamberOfWar __instance) {
+                bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
+                bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
+
+                // Conditions for activating hazard pay
+                bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
+                bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= 50;
+                bool canActivate = fullyStaffed && hasEnoughGold;
+
+                switch(state) {
+                    case 0: // Activation
+                        if (!Player.inst.hazardPay && (dragonAttack|| vikingAttack) && canActivate) {
+                            // Activate hazard pay when dragons or vikings spawn
+                            World.GetLandmassOwner(__instance.b.LandMass()).Gold -= 50;
+			                SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
                             Player.inst.ChangeHazardPayActive(true, true);
                             state = 1;
                         }
+                        else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) {
+                            // If hazard pay is already activated, it was done 
+                            // so manually, so do not deactivate automatically
+                            state = 3;
+                        }
                         break;
                     
-                    case 1: // Wait for warmup
-                        if (Player.inst.hazardPay) {
+                    case 1: // Warmup
+                        if (!Player.inst.hazardPayWarmup.Enabled) {
                             state = 2;
                         }
                         break;
                     
-                    case 2: // Deactivate hazard pay when Dragons despawn
-                        if (Player.inst.hazardPay && DragonSpawn.inst.currentDragons.Count == 0) {
+                    case 2: // Deactivation
+                        if (Player.inst.hazardPay && !dragonAttack && !vikingAttack) {
+                            // Deactivate hazard pay when dragons and vikings 
+                            // despawn
                             Player.inst.ChangeHazardPayActive(false, false);
                             state = 0;
                         }
+                        else if (!Player.inst.hazardPay) { 
+                            // Manually deactivated, do not auto activate again
+                            // until next invasion
+                            state = 3;
+                        }
+                        break;
+                    
+                    case 3: // Manual mode
+                        if (!dragonAttack && !vikingAttack) {
+                            // Manually activated/deactivated, do not use auto
+                            // until the next invasion by waiting out the 
+                            // current one
+                            state = 0;
+                        }
+                        break;
+                    
+                    default:
                         break;
                 }
             }
