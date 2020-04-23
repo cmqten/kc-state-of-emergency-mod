@@ -8,16 +8,16 @@ using UnityEngine;
 
 namespace KCMod {
     public class StateOfEmergencyMod: MonoBehaviour {
-        public KCModHelper helper;
+        public static KCModHelper helper;
+        private static int state = 0;
         
         //After scene loads
         void SceneLoaded(KCModHelper helper) { }
 
         //Before scene loads
-        void Preload(KCModHelper helper)
-        {
+        void Preload(KCModHelper _helper) {
             //Demonstrating how KCModHelper is used 
-            this.helper = helper;
+            helper = _helper;
             helper.Log(helper.modPath);
 
             //Load up Harmony
@@ -30,13 +30,12 @@ namespace KCMod {
         [HarmonyPatch(typeof(ChamberOfWar))]
         [HarmonyPatch("Update")]
         public static class StateOfEmergencyPatch {
-            private static int state = 0;
-
             static void Postfix(ChamberOfWar __instance) {
+                // Conditions for activating hazard pay
                 bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
                 bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
 
-                // Conditions for activating hazard pay
+                // Requirements for activating hazard pay
                 bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
                 bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= 50;
                 bool canActivate = fullyStaffed && hasEnoughGold;
@@ -51,8 +50,8 @@ namespace KCMod {
                             state = 1;
                         }
                         else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) {
-                            // If hazard pay is already activated, it was done 
-                            // so manually, so do not deactivate automatically
+                            // If hazard pay is already activated, it was done so manually, so do not deactivate 
+                            // automatically
                             state = 3;
                         }
                         break;
@@ -65,23 +64,20 @@ namespace KCMod {
                     
                     case 2: // Deactivation
                         if (Player.inst.hazardPay && !dragonAttack && !vikingAttack) {
-                            // Deactivate hazard pay when dragons and vikings 
-                            // despawn
+                            // Deactivate hazard pay when dragons and vikings despawn
                             Player.inst.ChangeHazardPayActive(false, false);
                             state = 0;
                         }
                         else if (!Player.inst.hazardPay) { 
-                            // Manually deactivated, do not auto activate again
-                            // until next invasion
+                            // Manually deactivated, do not auto activate again until next invasion
                             state = 3;
                         }
                         break;
                     
                     case 3: // Manual mode
                         if (!dragonAttack && !vikingAttack) {
-                            // Manually activated/deactivated, do not use auto
-                            // until the next invasion by waiting out the 
-                            // current one
+                            // Manually activated/deactivated, do not use auto until the next invasion by waiting out 
+                            // the current one
                             state = 0;
                         }
                         break;
@@ -89,6 +85,15 @@ namespace KCMod {
                     default:
                         break;
                 }
+            }
+        }
+
+        // When loading a new game, reset the state variables
+        [HarmonyPatch(typeof(Player))]
+        [HarmonyPatch("Reset")]
+        public static class ResetStateOfEmergency {
+            static void Postfix(Player __instance) {
+                state = 0;
             }
         }
     }
