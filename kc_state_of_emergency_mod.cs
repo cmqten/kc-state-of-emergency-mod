@@ -1,3 +1,11 @@
+/*
+This mod auto-activates/deactivates hazard pay and maxes out tax rates during an invasion.
+
+Author: https://steamcommunity.com/id/cmjten10/
+Mod Version: 1
+Tested with K&C Version: 117r5s-mods
+Date: 2020-04-24
+*/
 using Harmony;
 using System;
 using System.Collections.Generic;
@@ -6,112 +14,132 @@ using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
 
-namespace KCMod 
+namespace StateOfEmergencyMod 
 {
-    public class StateOfEmergencyMod: MonoBehaviour 
+    public class ModInit : MonoBehaviour 
     {
         public static KCModHelper helper;
-        private static int state = 0;
-        
-        // After scene loads
-        void SceneLoaded(KCModHelper _helper) { }
 
-        // Before scene loads
-        void Preload(KCModHelper _helper) 
+        void Preload(KCModHelper __helper) 
         {
-            // Demonstrating how KCModHelper is used 
-            helper = _helper;
+            helper = __helper;
             helper.Log(helper.modPath);
-
-            // Load up Harmony
             var harmony = HarmonyInstance.Create("harmony");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
+    }
 
-        private void Update() { }
+    // ChamberOfWar::Update patch for engaging hazard pay auto-activation/deactivation system.
+    [HarmonyPatch(typeof(ChamberOfWar))]
+    [HarmonyPatch("Update")]
+    public static class StateOfEmergencyPatch 
+    {
+        private static int state = 0;
+        private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
-        [HarmonyPatch(typeof(ChamberOfWar))]
-        [HarmonyPatch("Update")]
-        public static class StateOfEmergencyPatch 
+        static void Postfix(ChamberOfWar __instance) 
         {
-            static void Postfix(ChamberOfWar __instance) 
+            bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
+            bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
+
+            // Refer to ChamberOfWarUI::Update if hazard pay requirements change.
+            int goldNeeded = 50;
+            bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
+            bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= goldNeeded;
+            bool canActivate = fullyStaffed && hasEnoughGold;
+
+            switch(state) 
             {
-                // Conditions for activating hazard pay.
-                bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
-                bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
+                case 0: 
+                    // Activation state
+                    // If an invasion starts and hazard pay is not activated, auto-activates it if the requirements are 
+                    // met, then maximizes tax rates. Else if hazard pay is already activated, prevents from
+                    // auto-deactivation.
+                    if (!Player.inst.hazardPay && (dragonAttack|| vikingAttack) && canActivate) 
+                    {
+                        // Refer to: ChamberOfWarUI::OnHazardButtonToggled if hazard pay activation changes.
+                        World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
+                        SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
+                        Player.inst.ChangeHazardPayActive(true, true);
 
-                // Requirements for activating hazard pay.
-                bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
-                bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= 50;
-                bool canActivate = fullyStaffed && hasEnoughGold;
-
-                switch(state) 
-                {
-                    case 0:
-                        if (!Player.inst.hazardPay && (dragonAttack|| vikingAttack) && canActivate) 
+                        // Crank up the tax rates to maximum in order to afford hazard pay. Save the previous rates to 
+                        // restore them when the invasion is over.
+                        int landmassCount = Player.inst.PlayerLandmassOwner.ownedLandMasses.Count;
+                        for (int i = 0; i < landmassCount; i++)
                         {
-                            // Activate hazard pay automatically during an invasion. Refer to:
-                            // ChamberOfWarUI::OnHazardButtonToggled
-                            World.GetLandmassOwner(__instance.b.LandMass()).Gold -= 50;
-                            SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
-                            Player.inst.ChangeHazardPayActive(true, true);
-                            state = 1;
+                            int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[i];
+                            float landmassTaxRate = Player.inst.GetTaxRate(landmassId);
+                            taxRates.Add(landmassId, landmassTaxRate);
+                            Player.inst.SetTaxRate(landmassId, 3f);
                         }
-                        else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) {
-                            // Do not enable deactivation detection if already enabled before the invasion, i.e., 
-                            // manually activated.
-                            state = 3;
-                        }
-                        break;
-                    
-                    case 1:
-                        if (!Player.inst.hazardPayWarmup.Enabled) 
+                        state = 1;
+                    }
+                    else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) 
+                    {
+                        state = 3;
+                    }
+                    break;
+                
+                case 1: 
+                    // Activation warmup state
+                    // Hazard pay must finish activation before auto-deactivation. 
+                    if (!Player.inst.hazardPayWarmup.Enabled) 
+                    {
+                        state = 2;
+                    }
+                    break;
+                
+                case 2: 
+                    // Deactivation state
+                    // If the invasion is over, deactivates an auto-activated hazard pay. Else if hazard pay is 
+                    // deactivated during an invasion (manually or out of gold), prevents auto-activation until the next
+                    // invasion. Restores tax rates to original in both cases.
+                    if (Player.inst.hazardPay && !dragonAttack && !vikingAttack) 
+                    {
+                        Player.inst.ChangeHazardPayActive(false, false);
+                        foreach (KeyValuePair<int, float> entry in taxRates) 
                         {
-                            // This state waits out the warmup period before enabling the deactivation detection.
-                            state = 2;
+                            Player.inst.SetTaxRate(entry.Key, entry.Value);
                         }
-                        break;
-                    
-                    case 2:
-                        if (Player.inst.hazardPay && !dragonAttack && !vikingAttack) 
+                        taxRates.Clear();
+                        state = 0;
+                    }
+                    else if (!Player.inst.hazardPay) 
+                    {
+                        foreach (KeyValuePair<int, float> entry in taxRates) 
                         {
-                            // This state deactivates an automatically-activated hazard pay when the invasion is over.
-                            Player.inst.ChangeHazardPayActive(false, false);
-                            state = 0;
+                            Player.inst.SetTaxRate(entry.Key, entry.Value);
                         }
-                        else if (!Player.inst.hazardPay) {
-                            // Premature deactivation means the player manually deactivated or ran out of gold. Do not
-                            // automatically activate again until the next invasion.
-                            state = 3;
-                        }
-                        break;
-                    
-                    case 3:
-                        if (!dragonAttack && !vikingAttack) 
-                        {
-                            // This state disables automatic hazard pay activation/deactivation by waiting out the
-                            // current invasion. Goes here when hazard pay is manually activated/deactivated.
-                            state = 0;
-                        }
-                        break;
-                    
-                    default:
-                        break;
-                }
+                        taxRates.Clear();
+                        state = 3;
+                    }
+                    break;
+                
+                case 3: 
+                    // Auto-activation/deactivation disabled state
+                    // Waits out the current invasion before going back to the activation state. Goes to this state when 
+                    // hazard pay is activated before, or deactivated during an invasion.
+                    if (!dragonAttack && !vikingAttack) 
+                    {
+                        state = 0;
+                    }
+                    break;
+                
+                default:
+                    break;
             }
         }
 
+        // Player::Reset patch for resetting mod state when loading a different game.
         [HarmonyPatch(typeof(Player))]
         [HarmonyPatch("Reset")]
-        public static class ResetStateOfEmergency 
+        public static class ResetStateOfEmergencyPatch 
         {
             static void Postfix(Player __instance) 
             {
-                helper.Log("Reset");
-                // Reset state variables when Player state is reset, i.e., loading a new game.
                 state = 0;
+                taxRates.Clear();
             }
         }
     }
 }
-
