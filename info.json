@@ -1,7 +1,7 @@
 {
     "uniqueid": "kc-state-of-emergency-mod",
     "name": "State of Emergency",
-    "description": "Auto-activates/deactivates hazard pay and tax increase during dragon and viking invasions",
+    "description": "Auto-activates/deactivates hazard pay and tax increase during dragon and viking invasions.",
     "author": "https://steamcommunity.com/id/cmjten10/",
     "version": "1" 
 }

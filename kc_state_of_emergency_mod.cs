@@ -1,9 +1,9 @@
 /*
-This mod auto-activates/deactivates hazard pay and maxes out tax rates during an invasion.
+A mod that auto-activates/deactivates hazard pay and tax increase during dragon and viking invasions.
 
 Author: https://steamcommunity.com/id/cmjten10/
 Mod Version: 1
-Tested with K&C Version: 117r5s-mods
+Target K&C Version: 117r5s-mods
 Date: 2020-04-24
 */
 using Harmony;
@@ -23,7 +23,6 @@ namespace StateOfEmergencyMod
         void Preload(KCModHelper __helper) 
         {
             helper = __helper;
-            helper.Log(helper.modPath);
             var harmony = HarmonyInstance.Create("harmony");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
@@ -55,7 +54,7 @@ namespace StateOfEmergencyMod
                     // If an invasion starts and hazard pay is not activated, auto-activates it if the requirements are 
                     // met, then maximizes tax rates. Else if hazard pay is already activated, prevents from
                     // auto-deactivation.
-                    if (!Player.inst.hazardPay && (dragonAttack|| vikingAttack) && canActivate) 
+                    if (!Player.inst.hazardPay && (dragonAttack || vikingAttack) && canActivate) 
                     {
                         // Refer to: ChamberOfWarUI::OnHazardButtonToggled if hazard pay activation changes.
                         World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
