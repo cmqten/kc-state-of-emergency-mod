@@ -1,7 +1,7 @@
 {
     "uniqueid": "kc-state-of-emergency-mod",
     "name": "State of Emergency",
-    "description": "Auto-activates/deactivates hazard pay, tax increase, archer towers, and ballista towers during dragon and viking invasions.",
+    "description": "A mod that auto-activates/deactivates hazard pay and tax increase, and auto-opens/closes archer and ballista towers during dragon or viking invasions.",
     "author": "cmjten10",
     "version": "1.1" 
 }
