@@ -89,11 +89,19 @@ namespace StateOfEmergency
         // Refer to WorkerUI::Init for opening and closing buildings.
         private static void OpenCloseTower(Building tower, bool open)
         {
-            if (open != tower.Open)
+            try
             {
-                tower.Open = open;
-                string popUpText = open ? ScriptLocalization.Open : ScriptLocalization.OutputUIClosed;
-                ResourceTextStackManager.inst.ShowText(GameUI.inst.workerUI, tower.Center(), popUpText);
+                if (open != tower.Open)
+                {
+                    tower.Open = open;
+                    string popUpText = open ? ScriptLocalization.Open : ScriptLocalization.OutputUIClosed;
+                    ResourceTextStackManager.inst.ShowText(GameUI.inst.workerUI, tower.Center(), popUpText);
+                }
+            }
+            catch (Exception e)
+            {
+                helper.Log("ERROR: Exception raised while opening/closing tower.");
+                helper.Log(e.ToString());
             }
         }
 
@@ -222,10 +230,8 @@ namespace StateOfEmergency
                 }
                 catch (Exception e)
                 {
+                    helper.Log("ERROR: Exception raised in AutoHazardPayPatch.");
                     helper.Log(e.ToString());
-                    helper.Log(e.Message);
-                    helper.Log(e.Source);
-                    helper.Log(e.StackTrace);
                 }
             }
         }
@@ -237,39 +243,29 @@ namespace StateOfEmergency
         {
             static void Postfix(Player __instance) 
             {
-                try
+                switch (autoTowersState)
                 {
-                    switch (autoTowersState)
-                    {
-                        case 0:
-                            // Open all archer and ballista towers.
-                            if (InvasionInProgress())
-                            {
-                                OpenTowers();
-                                autoTowersState = 1;
-                            }
-                            break;
+                    case 0:
+                        // Open all archer and ballista towers.
+                        if (InvasionInProgress())
+                        {
+                            OpenTowers();
+                            autoTowersState = 1;
+                        }
+                        break;
 
-                        case 1:
-                            // Close towers that were closed before the invasion.
-                            if (!InvasionInProgress())
-                            {
-                                CloseTowers();
-                                autoTowers.Clear();
-                                autoTowersState = 0;
-                            }
-                            break;
+                    case 1:
+                        // Close towers that were closed before the invasion.
+                        if (!InvasionInProgress())
+                        {
+                            CloseTowers();
+                            autoTowers.Clear();
+                            autoTowersState = 0;
+                        }
+                        break;
 
-                        default:
-                            break;
-                    }
-                }
-                catch (Exception e)
-                {
-                    helper.Log(e.ToString());
-                    helper.Log(e.Message);
-                    helper.Log(e.Source);
-                    helper.Log(e.StackTrace);
+                    default:
+                        break;
                 }
             }
         }
@@ -281,18 +277,8 @@ namespace StateOfEmergency
         {
             static void Postfix(Player __instance) 
             {
-                try
-                {
-                    ResetAutoHazardPay();
-                    ResetAutoOpenCloseTowers();
-                }
-                catch (Exception e)
-                {
-                    helper.Log(e.ToString());
-                    helper.Log(e.Message);
-                    helper.Log(e.Source);
-                    helper.Log(e.StackTrace);
-                }
+                ResetAutoHazardPay();
+                ResetAutoOpenCloseTowers();
             }
         }
     }
