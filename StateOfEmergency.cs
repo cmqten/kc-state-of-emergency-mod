@@ -146,76 +146,86 @@ namespace StateOfEmergency
         {
             static void Postfix(ChamberOfWar __instance) 
             {
-                // Refer to ChamberOfWarUI::Update if hazard pay requirements change.
-                int goldNeeded = 50;
-                bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
-                bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= goldNeeded;
-                bool canActivate = fullyStaffed && hasEnoughGold;
-
-                switch(hazardPayState) 
+                try 
                 {
-                    case 0: 
-                        // Activation state
-                        // If an invasion starts and hazard pay is not activated, auto-activates it if the requirements 
-                        // are met, then maximizes tax rates. Else if hazard pay is already activated, prevents from
-                        // auto-deactivation.
-                        if (!Player.inst.hazardPay && InvasionInProgress() && canActivate) 
-                        {
-                            // Refer to: ChamberOfWarUI::OnHazardButtonToggled if hazard pay activation changes.
-                            World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
-                            SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
-                            Player.inst.ChangeHazardPayActive(true, true);
+                    // Refer to ChamberOfWarUI::Update if hazard pay requirements change.
+                    int goldNeeded = 50;
+                    bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
+                    bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= goldNeeded;
+                    bool canActivate = fullyStaffed && hasEnoughGold;
 
-                            // Crank up the tax rates to maximum in order to afford hazard pay. Save the previous rates 
-                            // to restore them when the invasion is over.
-                            MaximizeTaxRates();
-                            hazardPayState = 1;
-                        }
-                        else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) 
-                        {
-                            hazardPayState = 3;
-                        }
-                        break;
-                    
-                    case 1: 
-                        // Activation warmup state
-                        // Hazard pay must finish activation before auto-deactivation. 
-                        if (!Player.inst.hazardPayWarmup.Enabled) 
-                        {
-                            hazardPayState = 2;
-                        }
-                        break;
-                    
-                    case 2: 
-                        // Deactivation state
-                        // If the invasion is over, deactivates an auto-activated hazard pay. Else if hazard pay is 
-                        // deactivated during an invasion (manually or out of gold), prevents auto-activation until the 
-                        // next invasion. Restores tax rates to original in both cases.
-                        if (Player.inst.hazardPay && !InvasionInProgress()) 
-                        {
-                            Player.inst.ChangeHazardPayActive(false, false);
-                            RestoreTaxRates();
-                            hazardPayState = 0;
-                        }
-                        else if (!Player.inst.hazardPay) 
-                        {
-                            RestoreTaxRates();
-                            hazardPayState = 3;
-                        }
-                        break;
-                    
-                    case 3: 
-                        // Auto-activation/deactivation disabled state
-                        // Waits out the current invasion before going back to the activation state. Goes to this state 
-                        // when hazard pay is activated before, or deactivated during an invasion.
-                        if (!InvasionInProgress()) 
-                        {
-                            hazardPayState = 0;
-                        }
-                        break;
-                    
-                    default:
-                        break;
+                    switch(hazardPayState) 
+                    {
+                        case 0: 
+                            // Activation state
+                            // If an invasion starts and hazard pay is not activated, auto-activates it if the 
+                            // requirements are met, then maximizes tax rates. Else if hazard pay is already activated, 
+                            // prevents from auto-deactivation.
+                            if (!Player.inst.hazardPay && InvasionInProgress() && canActivate) 
+                            {
+                                // Refer to: ChamberOfWarUI::OnHazardButtonToggled if hazard pay activation changes.
+                                World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
+                                SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
+                                Player.inst.ChangeHazardPayActive(true, true);
+
+                                // Crank up the tax rates to maximum in order to afford hazard pay. Save the previous 
+                                // rates to restore them when the invasion is over.
+                                MaximizeTaxRates();
+                                hazardPayState = 1;
+                            }
+                            else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) 
+                            {
+                                hazardPayState = 3;
+                            }
+                            break;
+                        
+                        case 1: 
+                            // Activation warmup state
+                            // Hazard pay must finish activation before auto-deactivation. 
+                            if (!Player.inst.hazardPayWarmup.Enabled) 
+                            {
+                                hazardPayState = 2;
+                            }
+                            break;
+                        
+                        case 2: 
+                            // Deactivation state
+                            // If the invasion is over, deactivates an auto-activated hazard pay. Else if hazard pay is 
+                            // deactivated during an invasion (manually or out of gold), prevents auto-activation until 
+                            // the next invasion. Restores tax rates to original in both cases.
+                            if (Player.inst.hazardPay && !InvasionInProgress()) 
+                            {
+                                Player.inst.ChangeHazardPayActive(false, false);
+                                RestoreTaxRates();
+                                hazardPayState = 0;
+                            }
+                            else if (!Player.inst.hazardPay) 
+                            {
+                                RestoreTaxRates();
+                                hazardPayState = 3;
+                            }
+                            break;
+                        
+                        case 3: 
+                            // Auto-activation/deactivation disabled state
+                            // Waits out the current invasion before going back to the activation state. Goes to this 
+                            // state when hazard pay is activated before, or deactivated during an invasion.
+                            if (!InvasionInProgress()) 
+                            {
+                                hazardPayState = 0;
+                            }
+                            break;
+                        
+                        default:
+                            break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    helper.Log(e.ToString());
+                    helper.Log(e.Message);
+                    helper.Log(e.Source);
+                    helper.Log(e.StackTrace);
                 }
             }
         }
@@ -227,29 +237,39 @@ namespace StateOfEmergency
         {
             static void Postfix(Player __instance) 
             {
-                switch (autoTowersState)
+                try
                 {
-                    case 0:
-                        // Open all archer and ballista towers.
-                        if (InvasionInProgress())
-                        {
-                            OpenTowers();
-                            autoTowersState = 1;
-                        }
-                        break;
+                    switch (autoTowersState)
+                    {
+                        case 0:
+                            // Open all archer and ballista towers.
+                            if (InvasionInProgress())
+                            {
+                                OpenTowers();
+                                autoTowersState = 1;
+                            }
+                            break;
 
-                    case 1:
-                        // Close towers that were closed before the invasion.
-                        if (!InvasionInProgress())
-                        {
-                            CloseTowers();
-                            autoTowers.Clear();
-                            autoTowersState = 0;
-                        }
-                        break;
+                        case 1:
+                            // Close towers that were closed before the invasion.
+                            if (!InvasionInProgress())
+                            {
+                                CloseTowers();
+                                autoTowers.Clear();
+                                autoTowersState = 0;
+                            }
+                            break;
 
-                    default:
-                        break;
+                        default:
+                            break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    helper.Log(e.ToString());
+                    helper.Log(e.Message);
+                    helper.Log(e.Source);
+                    helper.Log(e.StackTrace);
                 }
             }
         }
@@ -261,8 +281,18 @@ namespace StateOfEmergency
         {
             static void Postfix(Player __instance) 
             {
-                ResetAutoHazardPay();
-                ResetAutoOpenCloseTowers();
+                try
+                {
+                    ResetAutoHazardPay();
+                    ResetAutoOpenCloseTowers();
+                }
+                catch (Exception e)
+                {
+                    helper.Log(e.ToString());
+                    helper.Log(e.Message);
+                    helper.Log(e.Source);
+                    helper.Log(e.StackTrace);
+                }
             }
         }
     }
