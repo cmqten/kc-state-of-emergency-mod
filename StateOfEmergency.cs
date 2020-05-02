@@ -23,6 +23,11 @@ namespace StateOfEmergency
     {
         public static KCModHelper helper;
 
+        // For accessing ChamberOfWarUI and private fields/methods
+        private static ChamberOfWarUI chamberOfWarUI;
+        private static Traverse chamberOfWarUITraverse;
+        private static Traverse chamberOfWarUI_hazardPayToggle_m_IsOn;
+
         // Hazard pay
         private static int hazardPayState = 0;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
@@ -36,6 +41,13 @@ namespace StateOfEmergency
             helper = __helper;
             var harmony = HarmonyInstance.Create("harmony");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
+        }
+
+        void SceneLoaded(KCModHelper __helper)
+        {
+            chamberOfWarUI = GameUI.inst.chamberOfWarUI;
+            chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
+            chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
         }
 
         // =====================================================================
@@ -175,6 +187,7 @@ namespace StateOfEmergency
                                 World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
                                 SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
                                 Player.inst.ChangeHazardPayActive(true, true);
+                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
 
                                 // Crank up the tax rates to maximum in order to afford hazard pay. Save the previous 
                                 // rates to restore them when the invasion is over.
@@ -190,8 +203,9 @@ namespace StateOfEmergency
                         case 1: 
                             // Activation warmup state
                             // Hazard pay must finish activation before auto-deactivation. 
-                            if (!Player.inst.hazardPayWarmup.Enabled) 
+                            if (!Player.inst.hazardPayWarmup.Enabled && Player.inst.hazardPay) 
                             {
+                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(true);
                                 hazardPayState = 2;
                             }
                             break;
@@ -204,11 +218,13 @@ namespace StateOfEmergency
                             if (Player.inst.hazardPay && !InvasionInProgress()) 
                             {
                                 Player.inst.ChangeHazardPayActive(false, false);
+                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
                                 RestoreTaxRates();
                                 hazardPayState = 0;
                             }
                             else if (!Player.inst.hazardPay) 
                             {
+                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
                                 RestoreTaxRates();
                                 hazardPayState = 3;
                             }
