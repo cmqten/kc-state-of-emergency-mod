@@ -3,9 +3,9 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.1
+Mod Version: 1.2
 Target K&C Version: 117r5s-mods
-Date: 2020-04-28
+Date: 2020-05-03
 */
 using Assets;
 using Harmony;
@@ -16,12 +16,14 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
+using Zat.Shared.ModMenu.API;
 
 namespace StateOfEmergency
 {
     public class StateOfEmergencyMod : MonoBehaviour 
     {
         public static KCModHelper helper;
+        public static ModSettingsProxy settingsProxy;
 
         // For accessing ChamberOfWarUI and private fields/methods
         private static ChamberOfWarUI chamberOfWarUI;
@@ -30,6 +32,7 @@ namespace StateOfEmergency
 
         // Hazard pay
         private static int hazardPayState = 0;
+        private static float maximumHazardPayTaxRate = 3f;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
         // Archer and ballista towers to be auto-opened/closed
@@ -48,6 +51,58 @@ namespace StateOfEmergency
             chamberOfWarUI = GameUI.inst.chamberOfWarUI;
             chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
             chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
+
+            if (!settingsProxy)
+            {
+                ModConfig config = ModConfigBuilder
+                    .Create("State of Emergency", "v1.2", "cmjten10")
+                    .AddSlider("State of Emergency/Tax Rate", 
+                        "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
+                        "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
+                    .Build();
+                ModSettingsBootstrapper.Register(config, OnProxyRegistered, OnProxyRegisterError);
+            }
+        }
+
+        // =====================================================================
+        // Mod Menu Functions
+        // =====================================================================
+
+        private void OnProxyRegistered(ModSettingsProxy proxy, SettingsEntry[] saved)
+        {
+            try
+            {
+                settingsProxy = proxy;
+                helper.Log("SUCCESS: Registered proxy for State of Emergency Mod Config");
+                proxy.AddSettingsChangedListener("State of Emergency/Tax Rate", (setting) =>
+                {
+                    maximumHazardPayTaxRate = (float)setting.slider.value * 0.5f;
+                    setting.slider.label = ((int)(maximumHazardPayTaxRate * 10)).ToString() + "%";
+                    proxy.UpdateSetting(setting, null, null);
+                });
+
+                // Apply saved values.
+                foreach (var setting in saved)
+                {
+                    var own = proxy.Config[setting.path];
+                    if (own != null)
+                    {
+                        own.CopyFrom(setting);
+                        proxy.UpdateSetting(own, null, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
+                helper.Log(ex.StackTrace);
+            }
+        }
+
+        private void OnProxyRegisterError(Exception ex)
+        {
+            helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
+            helper.Log($"{ex.StackTrace}");
         }
 
         // =====================================================================
@@ -65,15 +120,38 @@ namespace StateOfEmergency
         // Auto-Activate/Deactivate Hazard Pay Utility Functions
         // =====================================================================
 
+        private static bool MaximumTaxRateHigherThan30()
+        {
+            int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[0];
+            float taxRate = Player.inst.GetTaxRate(landmassId);
+
+            // Check if tax rate can be raised beyond 30% by temporarily setting to 30%, then trying to increase it.
+            Player.inst.SetTaxRate(landmassId, 3f);
+            Player.inst.IncreaseTaxRate(landmassId);
+            bool taxRateIs30 = Player.inst.GetTaxRate(landmassId) == 3f;
+            Player.inst.SetTaxRate(landmassId, taxRate);
+            return !taxRateIs30;
+        }
+
         private static void MaximizeTaxRates()
         {
+            // Only set hazard pay tax rate to higher than 30% if possible.
+            float hazardPayTaxRate = maximumHazardPayTaxRate;
+            if (hazardPayTaxRate > 3f && !MaximumTaxRateHigherThan30())
+            {
+                hazardPayTaxRate = 3f;
+            }
+
             int landmassesCount = Player.inst.PlayerLandmassOwner.ownedLandMasses.Count;
             for (int i = 0; i < landmassesCount; i++)
             {
                 int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[i];
                 float landmassTaxRate = Player.inst.GetTaxRate(landmassId);
-                taxRates.Add(landmassId, landmassTaxRate);
-                Player.inst.SetTaxRate(landmassId, 3f);
+                if (landmassTaxRate < hazardPayTaxRate)
+                {
+                    taxRates[landmassId] = landmassTaxRate;
+                    Player.inst.SetTaxRate(landmassId, hazardPayTaxRate);
+                }
             }
         }
 
