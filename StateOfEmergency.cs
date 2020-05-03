@@ -3,9 +3,9 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.1
+Mod Version: 1.2
 Target K&C Version: 117r5s-mods
-Date: 2020-04-28
+Date: 2020-05-03
 */
 using Assets;
 using Harmony;
@@ -30,6 +30,7 @@ namespace StateOfEmergency
 
         // Hazard pay
         private static int hazardPayState = 0;
+        private static float maximumHazardPayTaxRate = 3f;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
         // Archer and ballista towers to be auto-opened/closed
@@ -65,15 +66,38 @@ namespace StateOfEmergency
         // Auto-Activate/Deactivate Hazard Pay Utility Functions
         // =====================================================================
 
+        private static bool MaximumTaxRateHigherThan30()
+        {
+            int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[0];
+            float taxRate = Player.inst.GetTaxRate(landmassId);
+
+            // Check if tax rate can be raised beyond 30% by temporarily setting to 30%, then trying to increase it.
+            Player.inst.SetTaxRate(landmassId, 3f);
+            Player.inst.IncreaseTaxRate(landmassId);
+            bool taxRateIs30 = Player.inst.GetTaxRate(landmassId) == 3f;
+            Player.inst.SetTaxRate(landmassId, taxRate);
+            return !taxRateIs30;
+        }
+
         private static void MaximizeTaxRates()
         {
+            // Only set hazard pay tax rate to higher than 30% if possible.
+            float hazardPayTaxRate = maximumHazardPayTaxRate;
+            if (hazardPayTaxRate > 3f && !MaximumTaxRateHigherThan30())
+            {
+                hazardPayTaxRate = 3f;
+            }
+
             int landmassesCount = Player.inst.PlayerLandmassOwner.ownedLandMasses.Count;
             for (int i = 0; i < landmassesCount; i++)
             {
                 int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[i];
                 float landmassTaxRate = Player.inst.GetTaxRate(landmassId);
-                taxRates.Add(landmassId, landmassTaxRate);
-                Player.inst.SetTaxRate(landmassId, 3f);
+                if (landmassTaxRate < hazardPayTaxRate)
+                {
+                    taxRates[landmassId] = landmassTaxRate;
+                    Player.inst.SetTaxRate(landmassId, hazardPayTaxRate);
+                }
             }
         }
 
