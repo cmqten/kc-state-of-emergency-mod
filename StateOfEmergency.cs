@@ -16,12 +16,14 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using UnityEngine;
+using Zat.Shared.ModMenu.API;
 
 namespace StateOfEmergency
 {
     public class StateOfEmergencyMod : MonoBehaviour 
     {
         public static KCModHelper helper;
+        public static ModSettingsProxy settingsProxy;
 
         // For accessing ChamberOfWarUI and private fields/methods
         private static ChamberOfWarUI chamberOfWarUI;
@@ -49,6 +51,58 @@ namespace StateOfEmergency
             chamberOfWarUI = GameUI.inst.chamberOfWarUI;
             chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
             chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
+
+            if (!settingsProxy)
+            {
+                ModConfig config = ModConfigBuilder
+                    .Create("State of Emergency", "v1.2", "cmjten10")
+                    .AddSlider("State of Emergency/Tax Rate", 
+                        "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
+                        "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
+                    .Build();
+                ModSettingsBootstrapper.Register(config, OnProxyRegistered, OnProxyRegisterError);
+            }
+        }
+
+        // =====================================================================
+        // Mod Menu Functions
+        // =====================================================================
+
+        private void OnProxyRegistered(ModSettingsProxy proxy, SettingsEntry[] saved)
+        {
+            try
+            {
+                settingsProxy = proxy;
+                helper.Log("SUCCESS: Registered proxy for State of Emergency Mod Config");
+                proxy.AddSettingsChangedListener("State of Emergency/Tax Rate", (setting) =>
+                {
+                    maximumHazardPayTaxRate = (float)setting.slider.value * 0.5f;
+                    setting.slider.label = ((int)(maximumHazardPayTaxRate * 10)).ToString() + "%";
+                    proxy.UpdateSetting(setting, null, null);
+                });
+
+                // Apply saved values.
+                foreach (var setting in saved)
+                {
+                    var own = proxy.Config[setting.path];
+                    if (own != null)
+                    {
+                        own.CopyFrom(setting);
+                        proxy.UpdateSetting(own, null, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
+                helper.Log(ex.StackTrace);
+            }
+        }
+
+        private void OnProxyRegisterError(Exception ex)
+        {
+            helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
+            helper.Log($"{ex.StackTrace}");
         }
 
         // =====================================================================
