@@ -3,9 +3,9 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.2
-Target K&C Version: 117r5s-mods
-Date: 2020-05-03
+Mod Version: 1.2.1
+Target K&C Version: 117r6s-mods
+Date: 2020-05-06
 */
 using Assets;
 using Harmony;
@@ -65,7 +65,7 @@ namespace StateOfEmergency
             if (!settingsProxy)
             {
                 ModConfig config = ModConfigBuilder
-                    .Create("State of Emergency", "v1.2", "cmjten10")
+                    .Create("State of Emergency", "v1.2.1", "cmjten10")
                     .AddSlider("State of Emergency/Tax Rate", 
                         "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
                         "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
