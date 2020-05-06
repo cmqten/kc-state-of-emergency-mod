@@ -6,5 +6,5 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 ## Steam Workshop
-[State of Emergency v1.2.1](https://steamcommunity.com/sharedfiles/filedetails/?id=2072766236)
+[State of Emergency v1.2.2](https://steamcommunity.com/sharedfiles/filedetails/?id=2072766236)
 

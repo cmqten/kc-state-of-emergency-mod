@@ -3,8 +3,8 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.2.1
-Target K&C Version: 117r6s-mods
+Mod Version: 1.2.2
+Target K&C Version: 117r6s
 Date: 2020-05-06
 */
 using Assets;
@@ -22,6 +22,12 @@ namespace StateOfEmergency
 {
     public class StateOfEmergencyMod : MonoBehaviour 
     {
+        private const string authorName = "cmjten10";
+        private const string modName = "State of Emergency";
+        private const string modNameNoSpace = "StateOfEmergency";
+        private const string version = "v1.2.2";
+
+        private static HarmonyInstance harmony;
         public static KCModHelper helper;
         public static ModSettingsProxy settingsProxy;
 
@@ -43,8 +49,16 @@ namespace StateOfEmergency
         void Preload(KCModHelper __helper) 
         {
             helper = __helper;
-            var harmony = HarmonyInstance.Create("harmony");
+            harmony = HarmonyInstance.Create($"{authorName}.{modNameNoSpace}");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
+        }
+
+        void SceneLoaded(KCModHelper __helper)
+        {
+            chamberOfWarUI = GameUI.inst.chamberOfWarUI;
+            chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
+            chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
+
             maximumTaxRateHigherThan30 = HigherTaxesModExists(harmony);
             if (maximumTaxRateHigherThan30)
             {
@@ -54,18 +68,11 @@ namespace StateOfEmergency
             {
                 helper.Log("INFO: Higher Taxes mod not found.");
             }
-        }
-
-        void SceneLoaded(KCModHelper __helper)
-        {
-            chamberOfWarUI = GameUI.inst.chamberOfWarUI;
-            chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
-            chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
 
             if (!settingsProxy)
             {
                 ModConfig config = ModConfigBuilder
-                    .Create("State of Emergency", "v1.2.1", "cmjten10")
+                    .Create(modName, version, authorName)
                     .AddSlider("State of Emergency/Tax Rate", 
                         "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
                         "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
