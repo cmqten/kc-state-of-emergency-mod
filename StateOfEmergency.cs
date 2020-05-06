@@ -32,6 +32,7 @@ namespace StateOfEmergency
 
         // Hazard pay
         private static int hazardPayState = 0;
+        private static bool maximumTaxRateHigherThan30 = false;
         private static float maximumHazardPayTaxRate = 3f;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
@@ -44,6 +45,15 @@ namespace StateOfEmergency
             helper = __helper;
             var harmony = HarmonyInstance.Create("harmony");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
+            maximumTaxRateHigherThan30 = HigherTaxesModExists(harmony);
+            if (maximumTaxRateHigherThan30)
+            {
+                helper.Log("INFO: Higher Taxes mod found.");
+            }
+            else
+            {
+                helper.Log("INFO: Higher Taxes mod not found.");
+            }
         }
 
         void SceneLoaded(KCModHelper __helper)
@@ -109,6 +119,59 @@ namespace StateOfEmergency
         // Shared Utility Functions
         // =====================================================================
 
+        private static bool HigherTaxesModExists(HarmonyInstance harmonyInstance)
+        {
+            try
+            {
+                // Check if HigherTaxes exists by looking for specific patches.
+                var Player_IncreaseTaxRate = typeof(Player).GetMethod("IncreaseTaxRate");
+                var Home_GetHappinessFromTax = typeof(Home).GetMethod("GetHappinessFromTax", 
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                
+                bool Player_IncreaseTaxRate_patched = false;
+                bool Home_GetHappinessFromTax_patched = false;
+
+                // Check for patch that removes the 30% limit.
+                var info = harmonyInstance.GetPatchInfo(Player_IncreaseTaxRate);
+                if (info == null)
+                {
+                    return false;
+                }
+                foreach (var patch in info.Prefixes)
+                {
+                    if (patch.owner == "cmjten10.HigherTaxes")
+                    {
+                        Player_IncreaseTaxRate_patched = true;
+                        break;
+                    }
+                }
+                if (!Player_IncreaseTaxRate_patched)
+                {
+                    return false;
+                }
+
+                // Check for patch that decreases happiness further past 30%.
+                info = harmonyInstance.GetPatchInfo(Home_GetHappinessFromTax);
+                if (info == null)
+                {
+                    return false;
+                }
+                foreach (var patch in info.Postfixes)
+                {
+                    if (patch.owner == "cmjten10.HigherTaxes")
+                    {
+                        Home_GetHappinessFromTax_patched = true;
+                        break;
+                    }
+                }
+                return Home_GetHappinessFromTax_patched;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool InvasionInProgress()
         {
             bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
@@ -120,24 +183,11 @@ namespace StateOfEmergency
         // Auto-Activate/Deactivate Hazard Pay Utility Functions
         // =====================================================================
 
-        private static bool MaximumTaxRateHigherThan30()
-        {
-            int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[0];
-            float taxRate = Player.inst.GetTaxRate(landmassId);
-
-            // Check if tax rate can be raised beyond 30% by temporarily setting to 30%, then trying to increase it.
-            Player.inst.SetTaxRate(landmassId, 3f);
-            Player.inst.IncreaseTaxRate(landmassId);
-            bool taxRateIs30 = Player.inst.GetTaxRate(landmassId) == 3f;
-            Player.inst.SetTaxRate(landmassId, taxRate);
-            return !taxRateIs30;
-        }
-
         private static void MaximizeTaxRates()
         {
             // Only set hazard pay tax rate to higher than 30% if possible.
             float hazardPayTaxRate = maximumHazardPayTaxRate;
-            if (hazardPayTaxRate > 3f && !MaximumTaxRateHigherThan30())
+            if (hazardPayTaxRate > 3f && !maximumTaxRateHigherThan30)
             {
                 hazardPayTaxRate = 3f;
             }
