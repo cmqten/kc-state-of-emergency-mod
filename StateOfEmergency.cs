@@ -141,7 +141,8 @@ namespace StateOfEmergency
         // =====================================================================
         // Settings
         // =====================================================================
-        [Mod(ModMain.modName, ModMain.version, ModMain.authorName)]
+
+        [Mod(modName, version, authorName)]
         public class StateOfEmergencySettings
         {
             [Setting("State of Emergency Enabled", 
