@@ -22,6 +22,14 @@ namespace StateOfEmergency
         // Utility Functions
         // =====================================================================
 
+        private static IEnumerable<ArrayExt<Building>> getAllTowersTypeByType()
+        {
+            yield return Player.inst.GetBuildingList(World.archerTowerName);
+            yield return Player.inst.GetBuildingList(World.ballistaTowerName);
+            yield return Player.inst.GetBuildingList("siegecauldron");
+            yield return Player.inst.GetBuildingList("cannon");
+        }
+
         // Refer to WorkerUI::Init for opening and closing buildings.
         private static void OpenCloseTower(Building tower, bool open)
         {
@@ -43,12 +51,8 @@ namespace StateOfEmergency
 
         private static void OpenTowers()
         {
-            ArrayExt<Building> archerTowers = Player.inst.GetBuildingList(World.archerTowerName);
-            ArrayExt<Building> ballistaTowers = Player.inst.GetBuildingList(World.ballistaTowerName);
-            ArrayExt<Building>[] allTowers = new ArrayExt<Building>[] { archerTowers, ballistaTowers };
-
             // Track all archer and ballista towers that were opened to close them later.
-            foreach (ArrayExt<Building> towers in allTowers)
+            foreach (ArrayExt<Building> towers in getAllTowersTypeByType())
             {
                 for (int i = 0; i < towers.Count; i++)
                 {
