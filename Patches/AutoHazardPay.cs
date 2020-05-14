@@ -16,8 +16,6 @@ namespace StateOfEmergency
         private static int hazardPayState = 0;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
-        public static float maximumHazardPayTaxRate = 5f;
-
         // =====================================================================
         // Utility Functions
         // =====================================================================
@@ -25,7 +23,7 @@ namespace StateOfEmergency
         private static void MaximizeTaxRates()
         {
             // Only set hazard pay tax rate to higher than 30% if possible.
-            float hazardPayTaxRate = maximumHazardPayTaxRate;
+            float hazardPayTaxRate = ModMain.settings.autoHazardPaySettings.taxRate.Value * 0.5f;
             if (hazardPayTaxRate > 3f && !ModMain.higherTaxesExists)
             {
                 hazardPayTaxRate = 3f;
@@ -66,12 +64,20 @@ namespace StateOfEmergency
         // =====================================================================
 
         // ChamberOfWar::Update patch for engaging hazard pay auto-activation/deactivation system.
-        [HarmonyPatch(typeof(ChamberOfWar))]
-        [HarmonyPatch("Update")]
+        [HarmonyPatch(typeof(ChamberOfWar), "Update")]
         public static class AutoHazardPayPatch 
         {
-            static void Postfix(ChamberOfWar __instance) 
+            public static void Postfix(ChamberOfWar __instance) 
             {
+                bool featureEnabled = ModMain.settings.autoHazardPaySettings.enabled.Value;
+                bool modEnabled = ModMain.settings.enabled.Value;
+
+                if (!featureEnabled || !modEnabled)
+                {
+                    ResetAutoHazardPay();
+                    return;
+                }
+
                 try 
                 {
                     // Refer to ChamberOfWarUI::Update if hazard pay requirements change.
@@ -159,31 +165,37 @@ namespace StateOfEmergency
         }
 
         // Player::Reset patch for resetting mod state when loading a different game.
-        [HarmonyPatch(typeof(Player))]
-        [HarmonyPatch("Reset")]
-        public static class ResetStateOfEmergency
+        [HarmonyPatch(typeof(Player), "Reset")]
+        public static class ResetAutoHazardPayPatch
         {
-            static void Postfix(Player __instance) 
+            public static void Postfix() 
             {
                 ResetAutoHazardPay();
             }
         }
-    }
 
-    public class AutoHazardPaySettings
-    {
-        // !!! IMPORTANT: Change 10f to double of maximum tax rate if the latter somehow changes. !!!
-        [Setting("Tax Rate", "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.")]
-        [Slider(0, 10, 10f, "50%", true)]
-        public InteractiveSliderSetting taxRate { get; private set; }
+        // =====================================================================
+        // Settings
+        // =====================================================================
 
-        public void Setup()
+        public class Settings
         {
-            taxRate.OnUpdate.AddListener((setting) =>
+            [Setting("Enabled", "Auto-activate/deactivate hazard pay during invasions.")]
+            [Toggle(true, "")]
+            public InteractiveToggleSetting enabled { get; private set; }
+
+            [Setting("Tax Rate", "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.")]
+            [Slider(0, 10, 10f, "50%", true)]
+            public InteractiveSliderSetting taxRate { get; private set; }
+
+            public void Setup()
             {
-                AutoHazardPay.maximumHazardPayTaxRate = (float)setting.slider.value * 0.5f;
-                taxRate.Label = ((int)(AutoHazardPay.maximumHazardPayTaxRate * 10)).ToString() + "%";
-            });
+                taxRate.OnUpdate.AddListener((setting) =>
+                {
+                    int _taxRate = (int)((float)setting.slider.value) * 5;
+                    taxRate.Label = _taxRate.ToString() + "%";
+                });
+            }
         }
     }
 }

@@ -136,12 +136,20 @@ namespace StateOfEmergency
             bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
             return dragonAttack || vikingAttack;
         }
-    }
 
-    [Mod(ModMain.modName, ModMain.version, ModMain.authorName)]
-    public class StateOfEmergencySettings
-    {
-        [Category("Auto Hazard Pay")]
-        public AutoHazardPaySettings autoHazardPaySettings { get; private set; }
+        // =====================================================================
+        // Settings
+        // =====================================================================
+        [Mod(ModMain.modName, ModMain.version, ModMain.authorName)]
+        public class StateOfEmergencySettings
+        {
+            [Setting("State of Emergency Enabled", 
+            "Enable or disable mod. If disabled, the rest of the settings do not apply.")]
+            [Toggle(true, "")]
+            public InteractiveToggleSetting enabled { get; private set; }
+
+            [Category("Auto Hazard Pay")]
+            public AutoHazardPay.Settings autoHazardPaySettings { get; private set; }
+        }
     }
 }
