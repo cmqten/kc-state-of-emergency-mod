@@ -36,8 +36,8 @@ namespace StateOfEmergency
             }
             catch (Exception e)
             {
-                StateOfEmergencyMod.helper.Log("ERROR: Exception raised while opening/closing tower.");
-                StateOfEmergencyMod.helper.Log(e.ToString());
+                ModMain.helper.Log("ERROR: Exception raised while opening/closing tower.");
+                ModMain.helper.Log(e.ToString());
             }
         }
 
@@ -90,7 +90,7 @@ namespace StateOfEmergency
                 {
                     case 0:
                         // Open all archer and ballista towers.
-                        if (StateOfEmergencyMod.InvasionInProgress())
+                        if (ModMain.InvasionInProgress())
                         {
                             OpenTowers();
                             autoTowersState = 1;
@@ -99,7 +99,7 @@ namespace StateOfEmergency
 
                     case 1:
                         // Close towers that were closed before the invasion.
-                        if (!StateOfEmergencyMod.InvasionInProgress())
+                        if (!ModMain.InvasionInProgress())
                         {
                             CloseTowers();
                             autoTowers.Clear();

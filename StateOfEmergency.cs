@@ -3,43 +3,35 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.2.2
-Target K&C Version: 117r6s
-Date: 2020-05-06
+Mod Version: 1.3
+Target K&C Version: 117r7s
+Date: 2020-05-14
 */
-using Assets;
 using Harmony;
-using I2.Loc;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 using UnityEngine;
 using Zat.Shared.ModMenu.API;
+using Zat.Shared.ModMenu.Interactive;
 
 namespace StateOfEmergency
 {
-    public class StateOfEmergencyMod : MonoBehaviour 
+    public class ModMain : MonoBehaviour 
     {
-        private const string authorName = "cmjten10";
-        private const string modName = "State of Emergency";
-        private const string modNameNoSpace = "StateOfEmergency";
-        private const string version = "v1.2.2";
+        public const string authorName = "cmjten10";
+        public const string modName = "State of Emergency";
+        public const string modNameNoSpace = "StateOfEmergency";
+        public const string version = "v1.3";
 
         private static HarmonyInstance harmony;
         public static KCModHelper helper;
-        public static ModSettingsProxy settingsProxy;
+        public static ModSettingsProxy proxy;
+        public static StateOfEmergencySettings settings;
 
-        // For accessing ChamberOfWarUI and private fields/methods
-        private static ChamberOfWarUI chamberOfWarUI;
-        private static Traverse chamberOfWarUITraverse;
+        // For making sure Chamber of War UI state is consistent when activating hazard pay automatically.
         public static Traverse chamberOfWarUI_hazardPayToggle_m_IsOn;
 
         // Higher Taxes mod integration
-        public static bool higherTaxesExists = false; 
-
-        public static float maximumHazardPayTaxRate = 3f;
+        public static bool higherTaxesExists = false;
 
         void Preload(KCModHelper __helper) 
         {
@@ -50,8 +42,8 @@ namespace StateOfEmergency
 
         void SceneLoaded(KCModHelper __helper)
         {
-            chamberOfWarUI = GameUI.inst.chamberOfWarUI;
-            chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
+            ChamberOfWarUI chamberOfWarUI = GameUI.inst.chamberOfWarUI;
+            Traverse chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
             chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
 
             higherTaxesExists = HigherTaxesModExists(harmony);
@@ -64,57 +56,21 @@ namespace StateOfEmergency
                 helper.Log("INFO: Higher Taxes mod not found.");
             }
 
-            if (!settingsProxy)
+            if (!proxy)
             {
-                ModConfig config = ModConfigBuilder
-                    .Create(modName, version, authorName)
-                    .AddSlider("State of Emergency/Tax Rate", 
-                        "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
-                        "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
-                    .Build();
-                ModSettingsBootstrapper.Register(config, OnProxyRegistered, OnProxyRegisterError);
-            }
-        }
-
-        // =====================================================================
-        // Mod Menu Functions
-        // =====================================================================
-
-        private void OnProxyRegistered(ModSettingsProxy proxy, SettingsEntry[] saved)
-        {
-            try
-            {
-                settingsProxy = proxy;
-                helper.Log("SUCCESS: Registered proxy for State of Emergency Mod Config");
-                proxy.AddSettingsChangedListener("State of Emergency/Tax Rate", (setting) =>
+                var config = new InteractiveConfiguration<StateOfEmergencySettings>();
+                settings = config.Settings;
+                ModSettingsBootstrapper.Register(config.ModConfig, (_proxy, saved) =>
                 {
-                    maximumHazardPayTaxRate = (float)setting.slider.value * 0.5f;
-                    setting.slider.label = ((int)(maximumHazardPayTaxRate * 10)).ToString() + "%";
-                    proxy.UpdateSetting(setting, null, null);
+                    config.Install(_proxy, saved);
+                    proxy = _proxy;
+                    settings.autoHazardPaySettings.Setup();
+                }, (ex) =>
+                {
+                    helper.Log($"ERROR: Failed to register proxy for {modName} Mod config: {ex.Message}");
+                    helper.Log(ex.StackTrace);
                 });
-
-                // Apply saved values.
-                foreach (var setting in saved)
-                {
-                    var own = proxy.Config[setting.path];
-                    if (own != null)
-                    {
-                        own.CopyFrom(setting);
-                        proxy.UpdateSetting(own, null, null);
-                    }
-                }
             }
-            catch (Exception ex)
-            {
-                helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
-                helper.Log(ex.StackTrace);
-            }
-        }
-
-        private void OnProxyRegisterError(Exception ex)
-        {
-            helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
-            helper.Log($"{ex.StackTrace}");
         }
 
         // =====================================================================
@@ -180,5 +136,12 @@ namespace StateOfEmergency
             bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
             return dragonAttack || vikingAttack;
         }
+    }
+
+    [Mod(ModMain.modName, ModMain.version, ModMain.authorName)]
+    public class StateOfEmergencySettings
+    {
+        [Category("Auto Hazard Pay")]
+        public AutoHazardPaySettings autoHazardPaySettings { get; private set; }
     }
 }
