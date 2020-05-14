@@ -3,48 +3,35 @@ A mod that auto-activates/deactivates hazard pay and tax increase, and auto-open
 during dragon or viking invasions.
 
 Author: cmjten10 (https://steamcommunity.com/id/cmjten10/)
-Mod Version: 1.2.2
-Target K&C Version: 117r6s
-Date: 2020-05-06
+Mod Version: 1.3
+Target K&C Version: 117r7s
+Date: 2020-05-14
 */
-using Assets;
 using Harmony;
-using I2.Loc;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 using UnityEngine;
 using Zat.Shared.ModMenu.API;
+using Zat.Shared.ModMenu.Interactive;
 
 namespace StateOfEmergency
 {
-    public class StateOfEmergencyMod : MonoBehaviour 
+    public class ModMain : MonoBehaviour 
     {
-        private const string authorName = "cmjten10";
-        private const string modName = "State of Emergency";
-        private const string modNameNoSpace = "StateOfEmergency";
-        private const string version = "v1.2.2";
+        public const string authorName = "cmjten10";
+        public const string modName = "State of Emergency";
+        public const string modNameNoSpace = "StateOfEmergency";
+        public const string version = "v1.3";
 
         private static HarmonyInstance harmony;
         public static KCModHelper helper;
-        public static ModSettingsProxy settingsProxy;
+        public static ModSettingsProxy proxy;
+        public static StateOfEmergencySettings settings;
 
-        // For accessing ChamberOfWarUI and private fields/methods
-        private static ChamberOfWarUI chamberOfWarUI;
-        private static Traverse chamberOfWarUITraverse;
-        private static Traverse chamberOfWarUI_hazardPayToggle_m_IsOn;
+        // For making sure Chamber of War UI state is consistent when activating hazard pay automatically.
+        public static Traverse chamberOfWarUI_hazardPayToggle_m_IsOn;
 
-        // Hazard pay
-        private static int hazardPayState = 0;
-        private static bool maximumTaxRateHigherThan30 = false;
-        private static float maximumHazardPayTaxRate = 3f;
-        private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
-
-        // Archer and ballista towers to be auto-opened/closed
-        private static int autoTowersState = 0;
-        private static List<Building> autoTowers = new List<Building>();
+        // Higher Taxes mod integration
+        public static bool higherTaxesExists = false;
 
         void Preload(KCModHelper __helper) 
         {
@@ -55,12 +42,12 @@ namespace StateOfEmergency
 
         void SceneLoaded(KCModHelper __helper)
         {
-            chamberOfWarUI = GameUI.inst.chamberOfWarUI;
-            chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
+            ChamberOfWarUI chamberOfWarUI = GameUI.inst.chamberOfWarUI;
+            Traverse chamberOfWarUITraverse = Traverse.Create(chamberOfWarUI);
             chamberOfWarUI_hazardPayToggle_m_IsOn = chamberOfWarUITraverse.Field("hazardPayToggle").Field("m_IsOn");
 
-            maximumTaxRateHigherThan30 = HigherTaxesModExists(harmony);
-            if (maximumTaxRateHigherThan30)
+            higherTaxesExists = HigherTaxesModExists(harmony);
+            if (higherTaxesExists)
             {
                 helper.Log("INFO: Higher Taxes mod found.");
             }
@@ -69,57 +56,22 @@ namespace StateOfEmergency
                 helper.Log("INFO: Higher Taxes mod not found.");
             }
 
-            if (!settingsProxy)
+            if (!proxy)
             {
-                ModConfig config = ModConfigBuilder
-                    .Create(modName, version, authorName)
-                    .AddSlider("State of Emergency/Tax Rate", 
-                        "Tax rate during invasions. May go beyond 30% if Higher Taxes mod is installed.", 
-                        "30%", 0, 10, true, maximumHazardPayTaxRate * 2)
-                    .Build();
-                ModSettingsBootstrapper.Register(config, OnProxyRegistered, OnProxyRegisterError);
-            }
-        }
-
-        // =====================================================================
-        // Mod Menu Functions
-        // =====================================================================
-
-        private void OnProxyRegistered(ModSettingsProxy proxy, SettingsEntry[] saved)
-        {
-            try
-            {
-                settingsProxy = proxy;
-                helper.Log("SUCCESS: Registered proxy for State of Emergency Mod Config");
-                proxy.AddSettingsChangedListener("State of Emergency/Tax Rate", (setting) =>
+                var config = new InteractiveConfiguration<StateOfEmergencySettings>();
+                settings = config.Settings;
+                ModSettingsBootstrapper.Register(config.ModConfig, (_proxy, saved) =>
                 {
-                    maximumHazardPayTaxRate = (float)setting.slider.value * 0.5f;
-                    setting.slider.label = ((int)(maximumHazardPayTaxRate * 10)).ToString() + "%";
-                    proxy.UpdateSetting(setting, null, null);
+                    config.Install(_proxy, saved);
+                    proxy = _proxy;
+                    settings.autoHazardPaySettings.Setup();
+                    settings.autoTowersSettings.Setup();
+                }, (ex) =>
+                {
+                    helper.Log($"ERROR: Failed to register proxy for {modName} Mod config: {ex.Message}");
+                    helper.Log(ex.StackTrace);
                 });
-
-                // Apply saved values.
-                foreach (var setting in saved)
-                {
-                    var own = proxy.Config[setting.path];
-                    if (own != null)
-                    {
-                        own.CopyFrom(setting);
-                        proxy.UpdateSetting(own, null, null);
-                    }
-                }
             }
-            catch (Exception ex)
-            {
-                helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
-                helper.Log(ex.StackTrace);
-            }
-        }
-
-        private void OnProxyRegisterError(Exception ex)
-        {
-            helper.Log($"ERROR: Failed to register proxy for State of Emergency Mod config: {ex.Message}");
-            helper.Log($"{ex.StackTrace}");
         }
 
         // =====================================================================
@@ -179,7 +131,7 @@ namespace StateOfEmergency
             }
         }
 
-        private static bool InvasionInProgress()
+        public static bool InvasionInProgress()
         {
             bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
             bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
@@ -187,250 +139,22 @@ namespace StateOfEmergency
         }
 
         // =====================================================================
-        // Auto-Activate/Deactivate Hazard Pay Utility Functions
+        // Settings
         // =====================================================================
 
-        private static void MaximizeTaxRates()
+        [Mod(modName, version, authorName)]
+        public class StateOfEmergencySettings
         {
-            // Only set hazard pay tax rate to higher than 30% if possible.
-            float hazardPayTaxRate = maximumHazardPayTaxRate;
-            if (hazardPayTaxRate > 3f && !maximumTaxRateHigherThan30)
-            {
-                hazardPayTaxRate = 3f;
-            }
+            [Setting("State of Emergency Enabled", 
+            "Enable or disable mod. If disabled, the rest of the settings do not apply.")]
+            [Toggle(true, "")]
+            public InteractiveToggleSetting enabled { get; private set; }
 
-            int landmassesCount = Player.inst.PlayerLandmassOwner.ownedLandMasses.Count;
-            for (int i = 0; i < landmassesCount; i++)
-            {
-                int landmassId = Player.inst.PlayerLandmassOwner.ownedLandMasses.data[i];
-                float landmassTaxRate = Player.inst.GetTaxRate(landmassId);
-                if (landmassTaxRate < hazardPayTaxRate)
-                {
-                    taxRates[landmassId] = landmassTaxRate;
-                    Player.inst.SetTaxRate(landmassId, hazardPayTaxRate);
-                }
-            }
-        }
+            [Category("Auto Hazard Pay")]
+            public AutoHazardPay.Settings autoHazardPaySettings { get; private set; }
 
-        private static void RestoreTaxRates()
-        {
-            foreach (KeyValuePair<int, float> entry in taxRates) 
-            {
-                int landmassId = entry.Key;
-                float taxRate = entry.Value;
-                Player.inst.SetTaxRate(landmassId, taxRate);
-            }
-            taxRates.Clear();
-        }
-
-        private static void ResetAutoHazardPay()
-        {
-            hazardPayState = 0;
-            taxRates.Clear();
-        }
-
-        // =====================================================================
-        // Auto-Open/Close Towers Utility Functions
-        // =====================================================================
-
-        // Refer to WorkerUI::Init for opening and closing buildings.
-        private static void OpenCloseTower(Building tower, bool open)
-        {
-            try
-            {
-                if (open != tower.Open)
-                {
-                    tower.Open = open;
-                    string popUpText = open ? ScriptLocalization.Open : ScriptLocalization.OutputUIClosed;
-                    ResourceTextStackManager.inst.ShowText(GameUI.inst.workerUI, tower.Center(), popUpText);
-                }
-            }
-            catch (Exception e)
-            {
-                helper.Log("ERROR: Exception raised while opening/closing tower.");
-                helper.Log(e.ToString());
-            }
-        }
-
-        private static void OpenTowers()
-        {
-            ArrayExt<Building> archerTowers = Player.inst.GetBuildingList(World.archerTowerName);
-            ArrayExt<Building> ballistaTowers = Player.inst.GetBuildingList(World.ballistaTowerName);
-            ArrayExt<Building>[] allTowers = new ArrayExt<Building>[] { archerTowers, ballistaTowers };
-
-            // Track all archer and ballista towers that were opened to close them later.
-            foreach (ArrayExt<Building> towers in allTowers)
-            {
-                for (int i = 0; i < towers.Count; i++)
-                {
-                    Building tower = towers.data[i];
-                    if (!tower.Open)
-                    {
-                        OpenCloseTower(tower, true);
-                        autoTowers.Add(tower);
-                    }
-                }
-            }
-        }
-
-        private static void CloseTowers()
-        {
-            foreach (Building tower in autoTowers)
-            {
-                if (tower.Open)
-                {
-                    OpenCloseTower(tower, false);
-                }
-            }
-        }
-
-        private static void ResetAutoOpenCloseTowers()
-        {
-            autoTowersState = 0;
-            autoTowers.Clear();
-        }
-
-        // =====================================================================
-        // Patches
-        // =====================================================================
-
-        // ChamberOfWar::Update patch for engaging hazard pay auto-activation/deactivation system.
-        [HarmonyPatch(typeof(ChamberOfWar))]
-        [HarmonyPatch("Update")]
-        public static class AutoHazardPayPatch 
-        {
-            static void Postfix(ChamberOfWar __instance) 
-            {
-                try 
-                {
-                    // Refer to ChamberOfWarUI::Update if hazard pay requirements change.
-                    int goldNeeded = 50;
-                    bool fullyStaffed = (double)__instance.b.GetWorkerPercent() > 0.95;
-                    bool hasEnoughGold = World.GetLandmassOwner(__instance.b.LandMass()).Gold >= goldNeeded;
-                    bool canActivate = fullyStaffed && hasEnoughGold;
-
-                    switch(hazardPayState) 
-                    {
-                        case 0: 
-                            // Activation state
-                            // If an invasion starts and hazard pay is not activated, auto-activates it if the 
-                            // requirements are met, then maximizes tax rates. Else if hazard pay is already activated, 
-                            // prevents from auto-deactivation.
-                            if (!Player.inst.hazardPay && InvasionInProgress() && canActivate) 
-                            {
-                                // Refer to: ChamberOfWarUI::OnHazardButtonToggled if hazard pay activation changes.
-                                World.GetLandmassOwner(__instance.b.LandMass()).Gold -= goldNeeded;
-                                SfxSystem.inst.PlayFromBank("ui_merchant_sellto", Camera.main.transform.position);
-                                Player.inst.ChangeHazardPayActive(true, true);
-                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
-
-                                // Crank up the tax rates to maximum in order to afford hazard pay. Save the previous 
-                                // rates to restore them when the invasion is over.
-                                MaximizeTaxRates();
-                                hazardPayState = 1;
-                            }
-                            else if (Player.inst.hazardPay || Player.inst.hazardPayWarmup.Enabled) 
-                            {
-                                hazardPayState = 3;
-                            }
-                            break;
-                        
-                        case 1: 
-                            // Activation warmup state
-                            // Hazard pay must finish activation before auto-deactivation. 
-                            if (!Player.inst.hazardPayWarmup.Enabled && Player.inst.hazardPay) 
-                            {
-                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(true);
-                                hazardPayState = 2;
-                            }
-                            break;
-                        
-                        case 2: 
-                            // Deactivation state
-                            // If the invasion is over, deactivates an auto-activated hazard pay. Else if hazard pay is 
-                            // deactivated during an invasion (manually or out of gold), prevents auto-activation until 
-                            // the next invasion. Restores tax rates to original in both cases.
-                            if (Player.inst.hazardPay && !InvasionInProgress()) 
-                            {
-                                Player.inst.ChangeHazardPayActive(false, false);
-                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
-                                RestoreTaxRates();
-                                hazardPayState = 0;
-                            }
-                            else if (!Player.inst.hazardPay) 
-                            {
-                                chamberOfWarUI_hazardPayToggle_m_IsOn.SetValue(false);
-                                RestoreTaxRates();
-                                hazardPayState = 3;
-                            }
-                            break;
-                        
-                        case 3: 
-                            // Auto-activation/deactivation disabled state
-                            // Waits out the current invasion before going back to the activation state. Goes to this 
-                            // state when hazard pay is activated before, or deactivated during an invasion.
-                            if (!InvasionInProgress()) 
-                            {
-                                hazardPayState = 0;
-                            }
-                            break;
-                        
-                        default:
-                            break;
-                    }
-                }
-                catch (Exception e)
-                {
-                    helper.Log("ERROR: Exception raised in AutoHazardPayPatch.");
-                    helper.Log(e.ToString());
-                }
-            }
-        }
-
-        // Player::Update patch for tower auto-open/close.
-        [HarmonyPatch(typeof(Player))]
-        [HarmonyPatch("Update")]
-        public static class AutoOpenCloseTowersPatch 
-        {
-            static void Postfix(Player __instance) 
-            {
-                switch (autoTowersState)
-                {
-                    case 0:
-                        // Open all archer and ballista towers.
-                        if (InvasionInProgress())
-                        {
-                            OpenTowers();
-                            autoTowersState = 1;
-                        }
-                        break;
-
-                    case 1:
-                        // Close towers that were closed before the invasion.
-                        if (!InvasionInProgress())
-                        {
-                            CloseTowers();
-                            autoTowers.Clear();
-                            autoTowersState = 0;
-                        }
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-        }
-
-        // Player::Reset patch for resetting mod state when loading a different game.
-        [HarmonyPatch(typeof(Player))]
-        [HarmonyPatch("Reset")]
-        public static class ResetStateOfEmergency
-        {
-            static void Postfix(Player __instance) 
-            {
-                ResetAutoHazardPay();
-                ResetAutoOpenCloseTowers();
-            }
+            [Category("Auto Towers")]
+            public AutoTowers.Settings autoTowersSettings { get; private set; }
         }
     }
 }
