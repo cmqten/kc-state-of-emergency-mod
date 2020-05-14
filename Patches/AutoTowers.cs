@@ -50,7 +50,19 @@ namespace StateOfEmergency
             }
         }
 
-        private static void OpenTowers()
+        private static void OpenCloseAllTowers(bool open)
+        {
+            foreach (ArrayExt<Building> towers in getAllTowersTypeByType())
+            {
+                for (int i = 0; i < towers.Count; i++)
+                {
+                    Building tower = towers.data[i];
+                    OpenCloseTower(tower, open);
+                }
+            }
+        }
+
+        private static void OpenClosedTowers()
         {
             // Track all archer and ballista towers that were opened to close them later.
             foreach (ArrayExt<Building> towers in getAllTowersTypeByType())
@@ -67,7 +79,7 @@ namespace StateOfEmergency
             }
         }
 
-        private static void CloseTowers()
+        private static void CloseOpenedTowers()
         {
             foreach (Building tower in autoTowers)
             {
@@ -106,7 +118,7 @@ namespace StateOfEmergency
                         // Open all archer and ballista towers.
                         if (ModMain.InvasionInProgress())
                         {
-                            OpenTowers();
+                            OpenClosedTowers();
                             autoTowersState = 1;
                         }
                         break;
@@ -115,7 +127,7 @@ namespace StateOfEmergency
                         // Close towers that were closed before the invasion.
                         if (!ModMain.InvasionInProgress())
                         {
-                            CloseTowers();
+                            CloseOpenedTowers();
                             autoTowers.Clear();
                             autoTowersState = 0;
                         }
@@ -146,6 +158,26 @@ namespace StateOfEmergency
             [Setting("Enabled", "Auto-open/close towers during invasions.")]
             [Toggle(true, "")]
             public InteractiveToggleSetting enabled { get; private set; }
+
+            [Setting("Open All Towers", "")]
+            [Button("Open")]
+            public InteractiveButtonSetting openAll { get; private set; }
+
+            [Setting("Close All Towers", "")]
+            [Button("Close")]
+            public InteractiveButtonSetting closeAll { get; private set; }
+
+            public void Setup()
+            {
+                openAll.OnButtonPressed.AddListener(() =>
+                {
+                    OpenCloseAllTowers(true);
+                });
+                closeAll.OnButtonPressed.AddListener(() =>
+                {
+                    OpenCloseAllTowers(false);
+                });
+            }
         }
     }
 }

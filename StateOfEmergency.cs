@@ -65,6 +65,7 @@ namespace StateOfEmergency
                     config.Install(_proxy, saved);
                     proxy = _proxy;
                     settings.autoHazardPaySettings.Setup();
+                    settings.autoTowersSettings.Setup();
                 }, (ex) =>
                 {
                     helper.Log($"ERROR: Failed to register proxy for {modName} Mod config: {ex.Message}");
