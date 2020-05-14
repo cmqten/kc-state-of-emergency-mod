@@ -42,10 +42,6 @@ namespace StateOfEmergency
         private static float maximumHazardPayTaxRate = 3f;
         private static Dictionary<int, float> taxRates = new Dictionary<int, float>();
 
-        // Archer and ballista towers to be auto-opened/closed
-        private static int autoTowersState = 0;
-        private static List<Building> autoTowers = new List<Building>();
-
         void Preload(KCModHelper __helper) 
         {
             helper = __helper;
@@ -179,7 +175,7 @@ namespace StateOfEmergency
             }
         }
 
-        private static bool InvasionInProgress()
+        public static bool InvasionInProgress()
         {
             bool dragonAttack = DragonSpawn.inst.currentDragons.Count > 0;
             bool vikingAttack = RaiderSystem.inst.IsRaidInProgress();
@@ -227,67 +223,6 @@ namespace StateOfEmergency
         {
             hazardPayState = 0;
             taxRates.Clear();
-        }
-
-        // =====================================================================
-        // Auto-Open/Close Towers Utility Functions
-        // =====================================================================
-
-        // Refer to WorkerUI::Init for opening and closing buildings.
-        private static void OpenCloseTower(Building tower, bool open)
-        {
-            try
-            {
-                if (open != tower.Open)
-                {
-                    tower.Open = open;
-                    string popUpText = open ? ScriptLocalization.Open : ScriptLocalization.OutputUIClosed;
-                    ResourceTextStackManager.inst.ShowText(GameUI.inst.workerUI, tower.Center(), popUpText);
-                }
-            }
-            catch (Exception e)
-            {
-                helper.Log("ERROR: Exception raised while opening/closing tower.");
-                helper.Log(e.ToString());
-            }
-        }
-
-        private static void OpenTowers()
-        {
-            ArrayExt<Building> archerTowers = Player.inst.GetBuildingList(World.archerTowerName);
-            ArrayExt<Building> ballistaTowers = Player.inst.GetBuildingList(World.ballistaTowerName);
-            ArrayExt<Building>[] allTowers = new ArrayExt<Building>[] { archerTowers, ballistaTowers };
-
-            // Track all archer and ballista towers that were opened to close them later.
-            foreach (ArrayExt<Building> towers in allTowers)
-            {
-                for (int i = 0; i < towers.Count; i++)
-                {
-                    Building tower = towers.data[i];
-                    if (!tower.Open)
-                    {
-                        OpenCloseTower(tower, true);
-                        autoTowers.Add(tower);
-                    }
-                }
-            }
-        }
-
-        private static void CloseTowers()
-        {
-            foreach (Building tower in autoTowers)
-            {
-                if (tower.Open)
-                {
-                    OpenCloseTower(tower, false);
-                }
-            }
-        }
-
-        private static void ResetAutoOpenCloseTowers()
-        {
-            autoTowersState = 0;
-            autoTowers.Clear();
         }
 
         // =====================================================================
@@ -387,40 +322,6 @@ namespace StateOfEmergency
             }
         }
 
-        // Player::Update patch for tower auto-open/close.
-        [HarmonyPatch(typeof(Player))]
-        [HarmonyPatch("Update")]
-        public static class AutoOpenCloseTowersPatch 
-        {
-            static void Postfix(Player __instance) 
-            {
-                switch (autoTowersState)
-                {
-                    case 0:
-                        // Open all archer and ballista towers.
-                        if (InvasionInProgress())
-                        {
-                            OpenTowers();
-                            autoTowersState = 1;
-                        }
-                        break;
-
-                    case 1:
-                        // Close towers that were closed before the invasion.
-                        if (!InvasionInProgress())
-                        {
-                            CloseTowers();
-                            autoTowers.Clear();
-                            autoTowersState = 0;
-                        }
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-        }
-
         // Player::Reset patch for resetting mod state when loading a different game.
         [HarmonyPatch(typeof(Player))]
         [HarmonyPatch("Reset")]
@@ -429,7 +330,6 @@ namespace StateOfEmergency
             static void Postfix(Player __instance) 
             {
                 ResetAutoHazardPay();
-                ResetAutoOpenCloseTowers();
             }
         }
     }
