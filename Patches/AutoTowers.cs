@@ -9,6 +9,7 @@ using I2.Loc;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Zat.Shared.ModMenu.Interactive;
 
 namespace StateOfEmergency
 {
@@ -90,6 +91,15 @@ namespace StateOfEmergency
         {
             public static void Postfix(Player __instance) 
             {
+                bool featureEnabled = ModMain.settings.autoTowersSettings.enabled.Value;
+                bool modEnabled = ModMain.settings.enabled.Value;
+
+                if (!featureEnabled || !modEnabled)
+                {
+                    ResetAutoTowers();
+                    return;
+                }
+
                 switch (autoTowersState)
                 {
                     case 0:
@@ -125,6 +135,17 @@ namespace StateOfEmergency
             {
                 ResetAutoTowers();
             }
+        }
+
+        // =====================================================================
+        // Settings
+        // =====================================================================
+
+        public class Settings
+        {
+            [Setting("Enabled", "Auto-open/close towers during invasions.")]
+            [Toggle(true, "")]
+            public InteractiveToggleSetting enabled { get; private set; }
         }
     }
 }

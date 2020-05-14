@@ -150,6 +150,9 @@ namespace StateOfEmergency
 
             [Category("Auto Hazard Pay")]
             public AutoHazardPay.Settings autoHazardPaySettings { get; private set; }
+
+            [Category("Auto Towers")]
+            public AutoTowers.Settings autoTowersSettings { get; private set; }
         }
     }
 }
